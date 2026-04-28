@@ -2,6 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/pi-context-injector?style=flat-square)](https://www.npmjs.com/package/pi-context-injector) [![License](https://img.shields.io/github/license/MasuRii/pi-context-injector?style=flat-square)](LICENSE)
 
+<img width="1389" height="768" alt="image" src="https://github.com/user-attachments/assets/db3c4ceb-e24e-4bc7-93b1-be3ea5f88d5c" />
+
 `pi-context-injector` is a Pi extension that injects compact project context into the first user turn and adds continuity context after conversation compaction.
 
 - **npm**: https://www.npmjs.com/package/pi-context-injector

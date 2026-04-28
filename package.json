@@ -1,0 +1,72 @@
+{
+  "name": "pi-context-injector",
+  "version": "0.1.0",
+  "description": "Pi extension that injects project context into first-turn prompts and compaction continuity messages.",
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "config/config.example.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "npm run typecheck",
+    "lint": "npm run typecheck",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "check": "npm run build && npm run lint && npm run test",
+    "test:clean": "node -e \"require('node:fs').rmSync('.test-dist', { recursive: true, force: true })\"",
+    "pretest": "npm run test:clean",
+    "posttest": "npm run test:clean",
+    "package:dry-run": "npm pack --dry-run"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "pi-coding-agent",
+    "pi-tui",
+    "coding-agent",
+    "context-injection",
+    "project-context",
+    "compaction",
+    "developer-tools"
+  ],
+  "author": "MasuRii",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasuRii/pi-context-injector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MasuRii/pi-context-injector/issues"
+  },
+  "homepage": "https://github.com/MasuRii/pi-context-injector#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.2",
+    "@mariozechner/pi-tui": "^0.70.2"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.5",
+    "@mariozechner/pi-tui": "^0.70.5",
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3"
+  }
+}

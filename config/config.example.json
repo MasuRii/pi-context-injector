@@ -1,0 +1,40 @@
+{
+  "enabled": true,
+  "silent": true,
+  "injectionTarget": "user_message",
+  "dynamicFormat": true,
+  "readmeLines": 50,
+  "commitCount": 5,
+  "enableReadme": true,
+  "enableGit": true,
+  "enableWorkspaceState": true,
+  "enableTechStack": true,
+  "maxDependencies": 15,
+  "smartPrune": true,
+  "stripBold": true,
+  "pruneLicense": true,
+  "stripHtmlComments": true,
+  "maxCodeBlockLines": 15,
+  "stripNavigationLinks": true,
+  "stripDetailsTags": true,
+  "ignoredSections": [
+    "Sponsors",
+    "Contributors",
+    "Backers",
+    "Acknowledgements",
+    "Changelog",
+    "Donate"
+  ],
+  "skipForkedSessions": true,
+  "debug": false,
+  "compaction": {
+    "enabled": true,
+    "injectWorkspaceState": true,
+    "injectTechStack": false,
+    "injectActiveFiles": true,
+    "injectTodoState": true,
+    "maxRecentFiles": 20,
+    "recentFilesMaxAge": 7,
+    "additionalContext": []
+  }
+}

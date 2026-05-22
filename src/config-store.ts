@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
 	CONFIG_PATH,
@@ -127,6 +127,41 @@ function parseConfig(path: string): ContextInjectorConfig {
 	return normalizeContextInjectorConfig(parsed);
 }
 
+let cachedLoadResult: ConfigLoadResult | undefined;
+let cachedLoadFingerprint: string | undefined;
+
+function cloneLoadResult(result: ConfigLoadResult): ConfigLoadResult {
+	return {
+		...result,
+		config: normalizeContextInjectorConfig(result.config),
+	};
+}
+
+function getConfigFingerprint(path: string | undefined): string {
+	if (!path) {
+		return "missing";
+	}
+
+	try {
+		const stats = statSync(path);
+		return `${path}:${stats.mtimeMs}:${stats.size}`;
+	} catch {
+		return "missing";
+	}
+}
+
+function getActiveConfigPath(): string | undefined {
+	if (existsSync(CONFIG_PATH)) {
+		return CONFIG_PATH;
+	}
+
+	if (existsSync(LEGACY_CONFIG_PATH)) {
+		return LEGACY_CONFIG_PATH;
+	}
+
+	return undefined;
+}
+
 export function ensureConfigExists(): EnsureConfigResult {
 	if (existsSync(CONFIG_PATH)) {
 		return { created: false };
@@ -158,23 +193,35 @@ export function ensureConfigExists(): EnsureConfigResult {
 }
 
 export function loadContextInjectorConfig(): ConfigLoadResult {
+	const activePath = getActiveConfigPath();
+	const fingerprint = getConfigFingerprint(activePath);
+	if (cachedLoadResult && cachedLoadFingerprint === fingerprint) {
+		return cloneLoadResult(cachedLoadResult);
+	}
+
 	try {
-		if (existsSync(CONFIG_PATH)) {
-			return { config: parseConfig(CONFIG_PATH), source: "primary" };
+		let result: ConfigLoadResult;
+		if (activePath === CONFIG_PATH) {
+			result = { config: parseConfig(CONFIG_PATH), source: "primary" };
+		} else if (activePath === LEGACY_CONFIG_PATH) {
+			result = { config: parseConfig(LEGACY_CONFIG_PATH), source: "legacy" };
+		} else {
+			result = { config: cloneDefaultConfig(), source: "fallback" };
 		}
 
-		if (existsSync(LEGACY_CONFIG_PATH)) {
-			return { config: parseConfig(LEGACY_CONFIG_PATH), source: "legacy" };
-		}
-
-		return { config: cloneDefaultConfig(), source: "fallback" };
+		cachedLoadFingerprint = fingerprint;
+		cachedLoadResult = cloneLoadResult(result);
+		return result;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		return {
+		const result: ConfigLoadResult = {
 			config: cloneDefaultConfig(),
 			source: "fallback",
 			warning: `Failed to load ${EXTENSION_NAME} config: ${message}`,
 		};
+		cachedLoadFingerprint = fingerprint;
+		cachedLoadResult = cloneLoadResult(result);
+		return result;
 	}
 }
 
@@ -186,6 +233,8 @@ export function saveContextInjectorConfig(config: ContextInjectorConfig): Config
 		mkdirSync(dirname(CONFIG_PATH), { recursive: true });
 		writeFileSync(tmpPath, `${JSON.stringify(normalized, null, 2)}\n`, "utf-8");
 		renameSync(tmpPath, CONFIG_PATH);
+		cachedLoadFingerprint = undefined;
+		cachedLoadResult = undefined;
 		return { success: true };
 	} catch (error) {
 		try {

@@ -1,5 +1,5 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import type { SettingItem } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { SettingItem } from "@earendil-works/pi-tui";
 import { COMMAND_NAME, DEFAULT_CONFIG, EXTENSION_NAME } from "./constants.js";
 import type { ContextInjectorConfig } from "./types.js";
 

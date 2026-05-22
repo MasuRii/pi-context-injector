@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	COMPACTION_CONTEXT_TYPE,
 	DEFAULT_CONFIG,
@@ -19,6 +19,11 @@ import {
 	detectFormat,
 	extractTodoSnapshotFromBranch,
 } from "./context-builder.js";
+import {
+	createCompactionContextHash,
+	createCompactionContextMetadata,
+	sessionAlreadyHasCompactionContext,
+} from "./compaction-dedupe.js";
 import { registerContextInjectorCommand } from "./config-modal.js";
 import { ContextInjectorLogger } from "./logger.js";
 import type { ContextInjectorConfig } from "./types.js";
@@ -75,7 +80,6 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 	// decided once per session: inject on the first eligible turn, then never
 	// reinject on later turns in that same session.
 	const initialProjectContextHandledSessions = new Set<string>();
-	const compactionBlockBySession = new Map<string, string>();
 	const logger = new ContextInjectorLogger(() => config.debug);
 
 	const warnOnce = (message: string, ctx?: Pick<ExtensionContext, "hasUI" | "ui">): void => {
@@ -194,7 +198,7 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	pi.on("session_compact", async (_event, ctx) => {
+	pi.on("session_compact", async (event, ctx) => {
 		if (!config.enabled || !config.compaction.enabled) {
 			return;
 		}
@@ -213,12 +217,22 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 			}
 
 			const sessionKey = getSessionKey(ctx);
-			if (compactionBlockBySession.get(sessionKey) === built.block) {
-				logger.debug("Compaction context unchanged; skipping reinjection.", { sessionKey });
+			const compactionEntryId = typeof event.compactionEntry.id === "string" && event.compactionEntry.id.trim()
+				? event.compactionEntry.id.trim()
+				: undefined;
+			const contextHash = createCompactionContextHash(built.block);
+			if (
+				sessionAlreadyHasCompactionContext(ctx.sessionManager.getEntries() as unknown[], {
+					compactionEntryId,
+					contextHash,
+				})
+			) {
+				logger.debug("Compaction context already persisted; skipping reinjection.", {
+					sessionKey,
+					compactionEntryId,
+				});
 				return;
 			}
-
-			compactionBlockBySession.set(sessionKey, built.block);
 
 			pi.sendMessage(
 				{
@@ -226,6 +240,7 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 					content: built.block,
 					display: !config.silent,
 					details: {
+						...createCompactionContextMetadata({ compactionEntryId, contextHash }),
 						format,
 						sections: built.sectionNames,
 						generatedAt: new Date().toISOString(),

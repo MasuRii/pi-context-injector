@@ -11,3 +11,12 @@ All notable changes to this extension will be documented in this file.
 
 ### Added
 - Added MIT license text, README publication documentation, changelog, `.npmignore`, and TypeScript project configuration.
+
+## [0.1.1] - 2026-05-22
+
+### Added
+- Added compaction-context deduplication to avoid reinjecting identical session contexts after compaction.
+
+### Changed
+- Cached configuration loads by file fingerprint and moved debug logging to asynchronous redacted writes.
+- Updated Pi peer dependencies and runtime imports to the `@earendil-works` scope.

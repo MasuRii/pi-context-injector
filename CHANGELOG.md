@@ -12,6 +12,12 @@ All notable changes to this extension will be documented in this file.
 ### Added
 - Added MIT license text, README publication documentation, changelog, `.npmignore`, and TypeScript project configuration.
 
+## [0.1.2] - 2026-05-26
+
+### Changed
+- Widened peer dependency ranges from `^0.75.4` to `^0.74.0 || ^0.75.0` for both `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`.
+- Aligned dev dependencies to `^0.75.5` for `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`.
+
 ## [0.1.1] - 2026-05-22
 
 ### Added

@@ -1,32 +1,24 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
+	COMMAND_NAME,
 	COMPACTION_CONTEXT_TYPE,
 	DEFAULT_CONFIG,
 	EXTENSION_NAME,
 	LEGACY_CONFIG_PATH,
 	PROJECT_CONTEXT_TYPE,
 } from "./constants.js";
-import {
-	ensureConfigExists,
-	getContextInjectorConfigPath,
-	loadContextInjectorConfig,
-	normalizeContextInjectorConfig,
-	saveContextInjectorConfig,
-} from "./config-store.js";
-import {
-	buildCompactionContext,
-	buildProjectContext,
-	detectFormat,
-	extractTodoSnapshotFromBranch,
-} from "./context-builder.js";
-import {
-	createCompactionContextHash,
-	createCompactionContextMetadata,
-	sessionAlreadyHasCompactionContext,
-} from "./compaction-dedupe.js";
-import { registerContextInjectorCommand } from "./config-modal.js";
-import { ContextInjectorLogger } from "./logger.js";
 import type { ContextInjectorConfig } from "./types.js";
+
+type ConfigStoreModule = typeof import("./config-store.js");
+type ContextBuilderModule = typeof import("./context-builder.js");
+type CompactionDedupeModule = typeof import("./compaction-dedupe.js");
+type ConfigModalModule = typeof import("./config-modal.js");
+type LoggerModule = typeof import("./logger.js");
+
+interface ContextInjectorLoggerLike {
+	debug(message: string, details?: unknown): void;
+	warn(message: string, details?: unknown): void;
+}
 
 function cloneDefaultConfig(): ContextInjectorConfig {
 	return {
@@ -75,12 +67,54 @@ function shouldSkipParentLinkedSessionContext(config: ContextInjectorConfig, ctx
 export default function contextInjectorExtension(pi: ExtensionAPI): void {
 	let config: ContextInjectorConfig = cloneDefaultConfig();
 	let pendingLoadWarning: string | undefined;
+	let configStorePromise: Promise<ConfigStoreModule> | undefined;
+	let contextBuilderPromise: Promise<ContextBuilderModule> | undefined;
+	let compactionDedupePromise: Promise<CompactionDedupeModule> | undefined;
+	let configModalPromise: Promise<ConfigModalModule> | undefined;
+	let loggerModulePromise: Promise<LoggerModule> | undefined;
+	let loggerInstance: InstanceType<LoggerModule["ContextInjectorLogger"]> | undefined;
 	const warnedMessages = new Set<string>();
 	// before_agent_start runs for every prompt, but project context should only be
 	// decided once per session: inject on the first eligible turn, then never
 	// reinject on later turns in that same session.
 	const initialProjectContextHandledSessions = new Set<string>();
-	const logger = new ContextInjectorLogger(() => config.debug);
+
+	const loadConfigStore = (): Promise<ConfigStoreModule> => {
+		configStorePromise ??= import("./config-store.js");
+		return configStorePromise;
+	};
+
+	const loadContextBuilder = (): Promise<ContextBuilderModule> => {
+		contextBuilderPromise ??= import("./context-builder.js");
+		return contextBuilderPromise;
+	};
+
+	const loadCompactionDedupe = (): Promise<CompactionDedupeModule> => {
+		compactionDedupePromise ??= import("./compaction-dedupe.js");
+		return compactionDedupePromise;
+	};
+
+	const loadConfigModal = (): Promise<ConfigModalModule> => {
+		configModalPromise ??= import("./config-modal.js");
+		return configModalPromise;
+	};
+
+	const writeLog = (level: "debug" | "warn", message: string, details?: unknown): void => {
+		if (!config.debug) {
+			return;
+		}
+
+		loggerModulePromise ??= import("./logger.js");
+		void loggerModulePromise.then((moduleValue) => {
+			loggerInstance ??= new moduleValue.ContextInjectorLogger(() => config.debug);
+			loggerInstance[level](message, details);
+		}).catch(() => undefined);
+	};
+
+	const logger: ContextInjectorLoggerLike = {
+		debug: (message, details) => writeLog("debug", message, details),
+		warn: (message, details) => writeLog("warn", message, details),
+	};
 
 	const warnOnce = (message: string, ctx?: Pick<ExtensionContext, "hasUI" | "ui">): void => {
 		if (warnedMessages.has(message)) {
@@ -94,48 +128,61 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 		}
 	};
 
-	const refreshConfig = (ctx?: Pick<ExtensionContext, "hasUI" | "ui">): void => {
-		const ensureResult = ensureConfigExists();
-		if (ensureResult.error) {
-			warnOnce(ensureResult.error, ctx);
+	const refreshConfig = async (
+		ctx?: Pick<ExtensionContext, "hasUI" | "ui">,
+		options: { ensureExists?: boolean } = {},
+	): Promise<ConfigStoreModule> => {
+		const configStore = await loadConfigStore();
+		if (options.ensureExists) {
+			const ensureResult = configStore.ensureConfigExists();
+			if (ensureResult.error) {
+				warnOnce(ensureResult.error, ctx);
+			}
 		}
 
-		const loaded = loadContextInjectorConfig();
+		const loaded = configStore.loadContextInjectorConfig();
 		config = loaded.config;
 		pendingLoadWarning = loaded.warning;
 
 		if (loaded.source === "legacy") {
 			warnOnce(
-				`${EXTENSION_NAME}: using legacy config ${LEGACY_CONFIG_PATH}. Create ${getContextInjectorConfigPath()} to override it.`,
+				`${EXTENSION_NAME}: using legacy config ${LEGACY_CONFIG_PATH}. Create ${configStore.getContextInjectorConfigPath()} to override it.`,
 				ctx,
 			);
 		}
-	};
 
-	const setConfig = (next: ContextInjectorConfig, ctx: ExtensionCommandContext): void => {
-		config = normalizeContextInjectorConfig(next);
-		const saved = saveContextInjectorConfig(config);
-		if (!saved.success && saved.error) {
-			ctx.ui.notify(saved.error, "error");
-		}
-	};
-
-	registerContextInjectorCommand(pi, {
-		getConfig: () => config,
-		setConfig,
-		getConfigPath: getContextInjectorConfigPath,
-	});
-
-	pi.on("session_start", async (_event, ctx) => {
-		refreshConfig(ctx);
 		if (pendingLoadWarning) {
 			warnOnce(pendingLoadWarning, ctx);
 			pendingLoadWarning = undefined;
 		}
+
+		return configStore;
+	};
+
+	pi.registerCommand(COMMAND_NAME, {
+		description: "Configure project context injection",
+		handler: async (args, ctx) => {
+			const [configStore, configModal] = await Promise.all([
+				refreshConfig(ctx, { ensureExists: true }),
+				loadConfigModal(),
+			]);
+
+			await configModal.handleContextInjectorCommand(args, ctx, {
+				getConfig: () => config,
+				setConfig: (next: ContextInjectorConfig, commandCtx: ExtensionCommandContext) => {
+					config = configStore.normalizeContextInjectorConfig(next);
+					const saved = configStore.saveContextInjectorConfig(config);
+					if (!saved.success && saved.error) {
+						commandCtx.ui.notify(saved.error, "error");
+					}
+				},
+				getConfigPath: configStore.getContextInjectorConfigPath,
+			});
+		},
 	});
 
-
 	pi.on("before_agent_start", async (event, ctx) => {
+		await refreshConfig(ctx);
 		if (!config.enabled) {
 			return {};
 		}
@@ -157,6 +204,7 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 		}
 
 		try {
+			const { buildProjectContext, detectFormat } = await loadContextBuilder();
 			const format = detectFormat(config, ctx.model);
 			const built = await buildProjectContext(ctx.cwd, format, config, logger);
 			if (!built.block) {
@@ -199,6 +247,7 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_compact", async (event, ctx) => {
+		await refreshConfig(ctx);
 		if (!config.enabled || !config.compaction.enabled) {
 			return;
 		}
@@ -208,6 +257,7 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 		}
 
 		try {
+			const { buildCompactionContext, detectFormat, extractTodoSnapshotFromBranch } = await loadContextBuilder();
 			const format = detectFormat(config, ctx.model);
 			const todoSnapshot = extractTodoSnapshotFromBranch(ctx.sessionManager.getBranch() as unknown[]);
 			const built = await buildCompactionContext(ctx.cwd, format, config, logger, todoSnapshot);
@@ -220,6 +270,11 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 			const compactionEntryId = typeof event.compactionEntry.id === "string" && event.compactionEntry.id.trim()
 				? event.compactionEntry.id.trim()
 				: undefined;
+			const {
+				createCompactionContextHash,
+				createCompactionContextMetadata,
+				sessionAlreadyHasCompactionContext,
+			} = await loadCompactionDedupe();
 			const contextHash = createCompactionContextHash(built.block);
 			if (
 				sessionAlreadyHasCompactionContext(ctx.sessionManager.getEntries() as unknown[], {

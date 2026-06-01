@@ -54,7 +54,7 @@ function isZellijModalModule(value: unknown): value is ZellijModalModule {
 }
 
 async function loadZellijModalModule(): Promise<ZellijModalModule> {
-	const modulePath = "../../zellij-modal/index.js";
+	const modulePath = "../../zellij-modal/modal.js";
 	const moduleValue: unknown = await import(modulePath);
 	if (!isZellijModalModule(moduleValue)) {
 		throw new Error("zellij-modal did not expose the expected modal constructors.");
@@ -429,25 +429,31 @@ function handleArgs(args: string, ctx: ExtensionCommandContext, controller: Cont
 	return true;
 }
 
+export async function handleContextInjectorCommand(
+	args: string,
+	ctx: ExtensionCommandContext,
+	controller: ContextInjectorConfigController,
+): Promise<void> {
+	if (handleArgs(args, ctx, controller)) {
+		return;
+	}
+
+	if (!ctx.hasUI) {
+		ctx.ui.notify(`/${COMMAND_NAME} requires interactive TUI mode.`, "warning");
+		return;
+	}
+
+	try {
+		await openSettingsModal(ctx, controller);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		ctx.ui.notify(`Failed to open ${EXTENSION_NAME} settings: ${message}`, "warning");
+	}
+}
+
 export function registerContextInjectorCommand(pi: ExtensionAPI, controller: ContextInjectorConfigController): void {
 	pi.registerCommand(COMMAND_NAME, {
 		description: "Configure project context injection",
-		handler: async (args, ctx) => {
-			if (handleArgs(args, ctx, controller)) {
-				return;
-			}
-
-			if (!ctx.hasUI) {
-				ctx.ui.notify(`/${COMMAND_NAME} requires interactive TUI mode.`, "warning");
-				return;
-			}
-
-			try {
-				await openSettingsModal(ctx, controller);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				ctx.ui.notify(`Failed to open ${EXTENSION_NAME} settings: ${message}`, "warning");
-			}
-		},
+		handler: (args, ctx) => handleContextInjectorCommand(args, ctx, controller),
 	});
 }

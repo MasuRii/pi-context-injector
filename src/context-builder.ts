@@ -3,8 +3,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { README_CANDIDATES } from "./constants.js";
 import { runCommand } from "./command-runner.js";
-import type { ContextInjectorLogger } from "./logger.js";
 import type { BuildContextResult, ContextFormat, ContextInjectorConfig, TodoSnapshot } from "./types.js";
+
+interface ContextBuildLogger {
+	debug(message: string, details?: unknown): void;
+}
 
 interface ModelLike {
 	provider?: string;
@@ -165,7 +168,7 @@ async function getReadmeSection(
 	cwd: string,
 	format: ContextFormat,
 	config: ContextInjectorConfig,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 ): Promise<SourceResult> {
 	if (!config.enableReadme) {
 		return { name: "readme", content: null };
@@ -206,7 +209,7 @@ async function getGitSection(
 	cwd: string,
 	format: ContextFormat,
 	config: ContextInjectorConfig,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 ): Promise<SourceResult> {
 	if (!config.enableGit) {
 		return { name: "git", content: null };
@@ -278,7 +281,7 @@ async function getWorkspaceSection(
 	cwd: string,
 	format: ContextFormat,
 	enabled: boolean,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 ): Promise<SourceResult> {
 	if (!enabled) {
 		return { name: "workspace", content: null };
@@ -426,7 +429,7 @@ async function getTechStackSection(
 	cwd: string,
 	format: ContextFormat,
 	config: ContextInjectorConfig,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 ): Promise<SourceResult> {
 	if (!config.enableTechStack) {
 		return { name: "tech_stack", content: null };
@@ -521,7 +524,7 @@ async function getActiveFilesSection(
 	cwd: string,
 	format: ContextFormat,
 	config: ContextInjectorConfig,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 ): Promise<SourceResult> {
 	const days = config.compaction.recentFilesMaxAge;
 	const result = await runCommand(
@@ -695,7 +698,7 @@ export async function buildProjectContext(
 	cwd: string,
 	format: ContextFormat,
 	config: ContextInjectorConfig,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 ): Promise<BuildContextResult> {
 	const [readme, techStack, workspace, git] = await Promise.all([
 		getReadmeSection(cwd, format, config, logger),
@@ -731,7 +734,7 @@ export async function buildCompactionContext(
 	cwd: string,
 	format: ContextFormat,
 	config: ContextInjectorConfig,
-	logger: ContextInjectorLogger,
+	logger: ContextBuildLogger,
 	todoSnapshot: TodoSnapshot | null,
 ): Promise<BuildContextResult> {
 	const sections: SourceResult[] = [];

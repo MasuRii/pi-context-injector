@@ -4,13 +4,21 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-01
+
 ### Changed
+- Deferred config, context-builder, and configuration-modal loading from the entrypoint to reduce startup work.
+- Decoupled context-builder logging from the extension logger instance.
+- Updated Pi peer and dev dependency metadata for 0.78-compatible runtimes.
 - Renamed the extension package and runtime extension ID from `context-injector` to `pi-context-injector` for npm/GitHub publication alignment.
 - Standardized root metadata, TypeScript verification scripts, repository links, license metadata, npm publish settings, and package file boundaries.
 - Moved runtime configuration to root `config.json` and debug output to root `debug/pi-context-injector-debug.log` with `debug` defaulting to `false`.
 
 ### Added
 - Added MIT license text, README publication documentation, changelog, `.npmignore`, and TypeScript project configuration.
+
+### Fixed
+- Updated zellij modal integration to import `modal.js`.
 
 ## [0.1.2] - 2026-05-26
 

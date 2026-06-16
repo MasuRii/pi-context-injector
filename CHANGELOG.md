@@ -4,6 +4,14 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-06-16
+
+### Fixed
+- Escaped XML special characters (`&`, `<`, `>`) in todo section content and additional-context notes to prevent malformed XML context output.
+
+### Changed
+- Initialized the jiti filesystem cache directory before loading runtime modules to avoid transient cache-miss failures on first import.
+
 ## [0.1.3] - 2026-06-01
 
 ### Changed

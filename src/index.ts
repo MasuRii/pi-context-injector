@@ -7,6 +7,7 @@ import {
 	LEGACY_CONFIG_PATH,
 	PROJECT_CONTEXT_TYPE,
 } from "./constants.js";
+import { ensureJitiFsCacheDirectory } from "./jiti-cache.js";
 import type { ContextInjectorConfig } from "./types.js";
 
 type ConfigStoreModule = typeof import("./config-store.js");
@@ -79,23 +80,28 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 	// reinject on later turns in that same session.
 	const initialProjectContextHandledSessions = new Set<string>();
 
+	const importRuntimeModule = <T>(loader: () => Promise<T>): Promise<T> => {
+		ensureJitiFsCacheDirectory();
+		return loader();
+	};
+
 	const loadConfigStore = (): Promise<ConfigStoreModule> => {
-		configStorePromise ??= import("./config-store.js");
+		configStorePromise ??= importRuntimeModule(() => import("./config-store.js"));
 		return configStorePromise;
 	};
 
 	const loadContextBuilder = (): Promise<ContextBuilderModule> => {
-		contextBuilderPromise ??= import("./context-builder.js");
+		contextBuilderPromise ??= importRuntimeModule(() => import("./context-builder.js"));
 		return contextBuilderPromise;
 	};
 
 	const loadCompactionDedupe = (): Promise<CompactionDedupeModule> => {
-		compactionDedupePromise ??= import("./compaction-dedupe.js");
+		compactionDedupePromise ??= importRuntimeModule(() => import("./compaction-dedupe.js"));
 		return compactionDedupePromise;
 	};
 
 	const loadConfigModal = (): Promise<ConfigModalModule> => {
-		configModalPromise ??= import("./config-modal.js");
+		configModalPromise ??= importRuntimeModule(() => import("./config-modal.js"));
 		return configModalPromise;
 	};
 
@@ -104,7 +110,7 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		loggerModulePromise ??= import("./logger.js");
+		loggerModulePromise ??= importRuntimeModule(() => import("./logger.js"));
 		void loggerModulePromise.then((moduleValue) => {
 			loggerInstance ??= new moduleValue.ContextInjectorLogger(() => config.debug);
 			loggerInstance[level](message, details);

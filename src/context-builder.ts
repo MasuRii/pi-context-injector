@@ -33,6 +33,13 @@ function escapeXmlAttribute(value: string): string {
 		.replace(/'/g, "&apos;");
 }
 
+function escapeXmlText(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
 function toLines(content: string): string[] {
 	return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
 }
@@ -622,15 +629,18 @@ function buildTodoSection(format: ContextFormat, snapshot: TodoSnapshot): Source
 	if (format === "xml") {
 		const parts: string[] = [];
 		if (snapshot.inProgress.length > 0) {
-			parts.push(`<in_progress count="${snapshot.inProgress.length}">\n${snapshot.inProgress.join("\n")}\n</in_progress>`);
+			const inProgress = snapshot.inProgress.map(escapeXmlText).join("\n");
+			parts.push(`<in_progress count="${snapshot.inProgress.length}">\n${inProgress}\n</in_progress>`);
 		}
 		if (snapshot.pending.length > 0) {
-			parts.push(`<pending count="${snapshot.pending.length}">\n${snapshot.pending.join("\n")}\n</pending>`);
+			const pending = snapshot.pending.map(escapeXmlText).join("\n");
+			parts.push(`<pending count="${snapshot.pending.length}">\n${pending}\n</pending>`);
 		}
 		if (snapshot.completed.length > 0) {
 			const recentCompleted = snapshot.completed.slice(-5);
+			const completed = recentCompleted.map(escapeXmlText).join("\n");
 			parts.push(
-				`<completed count="${snapshot.completed.length}" showing="${recentCompleted.length}">\n${recentCompleted.join("\n")}\n</completed>`,
+				`<completed count="${snapshot.completed.length}" showing="${recentCompleted.length}">\n${completed}\n</completed>`,
 			);
 		}
 
@@ -666,7 +676,7 @@ function withAdditionalContext(format: ContextFormat, source: string[]): string[
 	return source
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0)
-		.map((line) => (format === "xml" ? `<note>${line}</note>` : `- ${line}`));
+		.map((line) => (format === "xml" ? `<note>${escapeXmlText(line)}</note>` : `- ${line}`));
 }
 
 export function detectFormat(config: ContextInjectorConfig, model: ModelLike | undefined): ContextFormat {

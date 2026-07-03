@@ -11,10 +11,13 @@ const JITI_CACHE_DIR = join(tmpdir(), "jiti");
  * default temp cache directory before lazy imports so hooks stay functional in
  * empty or freshly-created workspaces.
  */
-export function ensureJitiFsCacheDirectory(): void {
+export function ensureJitiFsCacheDirectory(): string | undefined {
 	try {
 		mkdirSync(JITI_CACHE_DIR, { recursive: true });
-	} catch {
-		// Best effort only: the following import will surface the real failure.
+		return undefined;
+	} catch (error) {
+		// Best effort only: return the reason so callers can attach it if the
+		// subsequent import also fails. The import surfaces the real failure.
+		return error instanceof Error ? error.message : String(error);
 	}
 }

@@ -45,38 +45,44 @@ export class ContextInjectorLogger {
 	}
 
 	debug(message: string, details?: unknown): void {
-		if (!this.isEnabled()) {
-			return;
-		}
-
-		this.write("DEBUG", message, details);
+		this.logIfEnabled("DEBUG", message, details);
 	}
 
 	warn(message: string, details?: unknown): void {
+		this.logIfEnabled("WARN", message, details);
+	}
+
+	private logIfEnabled(level: string, message: string, details?: unknown): void {
 		if (!this.isEnabled()) {
 			return;
 		}
-		this.write("WARN", message, details);
+		this.write(level, message, details);
 	}
 
-	private ensureDebugDirectory(): void {
+	private ensureDebugDirectory(): boolean {
 		if (this.debugDirEnsured) {
-			return;
+			return true;
 		}
-		if (!existsSync(DEBUG_DIR)) {
-			mkdirSync(DEBUG_DIR, { recursive: true });
+		try {
+			if (!existsSync(DEBUG_DIR)) {
+				mkdirSync(DEBUG_DIR, { recursive: true });
+			}
+			this.debugDirEnsured = true;
+			return true;
+		} catch {
+			// Debug logging must never affect context injection or TUI
+			// responsiveness. Leave debugDirEnsured false so a later call can
+			// retry once the directory becomes writable.
+			return false;
 		}
-		this.debugDirEnsured = true;
 	}
 
 	private write(level: string, message: string, details?: unknown): void {
-		try {
-			this.ensureDebugDirectory();
-			const timestamp = new Date().toISOString();
-			const line = `[${timestamp}] [${level}] ${message}${formatDetails(details)}\n`;
-			void appendFile(DEBUG_LOG_PATH, line, "utf-8").catch(() => undefined);
-		} catch {
-			// Debug logging must never affect context injection or TUI responsiveness.
+		if (!this.ensureDebugDirectory()) {
+			return;
 		}
+		const timestamp = new Date().toISOString();
+		const line = `[${timestamp}] [${level}] ${message}${formatDetails(details)}\n`;
+		void appendFile(DEBUG_LOG_PATH, line, "utf-8").catch(() => undefined);
 	}
 }

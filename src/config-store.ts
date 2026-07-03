@@ -8,8 +8,8 @@ import {
 	LEGACY_CONFIG_PATH,
 } from "./constants.js";
 import { parseJsonc } from "./jsonc.js";
+import { cloneDefaultConfig } from "./shared/config-defaults.js";
 import type {
-	CompactionConfig,
 	ConfigLoadResult,
 	ConfigSaveResult,
 	ContextInjectorConfig,
@@ -49,27 +49,6 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 
 function toInjectionTarget(value: unknown): InjectionTarget {
 	return value === "system_prompt" ? "system_prompt" : "user_message";
-}
-
-function cloneCompactionDefaults(): CompactionConfig {
-	return {
-		enabled: DEFAULT_CONFIG.compaction.enabled,
-		injectWorkspaceState: DEFAULT_CONFIG.compaction.injectWorkspaceState,
-		injectTechStack: DEFAULT_CONFIG.compaction.injectTechStack,
-		injectActiveFiles: DEFAULT_CONFIG.compaction.injectActiveFiles,
-		injectTodoState: DEFAULT_CONFIG.compaction.injectTodoState,
-		maxRecentFiles: DEFAULT_CONFIG.compaction.maxRecentFiles,
-		recentFilesMaxAge: DEFAULT_CONFIG.compaction.recentFilesMaxAge,
-		additionalContext: [...DEFAULT_CONFIG.compaction.additionalContext],
-	};
-}
-
-function cloneDefaultConfig(): ContextInjectorConfig {
-	return {
-		...DEFAULT_CONFIG,
-		ignoredSections: [...DEFAULT_CONFIG.ignoredSections],
-		compaction: cloneCompactionDefaults(),
-	};
 }
 
 export function normalizeContextInjectorConfig(raw: unknown): ContextInjectorConfig {
@@ -237,15 +216,19 @@ export function saveContextInjectorConfig(config: ContextInjectorConfig): Config
 		cachedLoadResult = undefined;
 		return { success: true };
 	} catch (error) {
+		let cleanupWarning: string | undefined;
 		try {
 			if (existsSync(tmpPath)) {
 				unlinkSync(tmpPath);
 			}
-		} catch {
-			// Ignore cleanup errors.
+		} catch (cleanupError) {
+			// Surface cleanup failures explicitly instead of swallowing them;
+			// attach the reason to the save-failure result for diagnostics.
+			cleanupWarning = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
 		}
 		const message = error instanceof Error ? error.message : String(error);
-		return { success: false, error: `Failed to save ${CONFIG_PATH}: ${message}` };
+		const detail = cleanupWarning ? ` (tmp cleanup also failed: ${cleanupWarning})` : "";
+		return { success: false, error: `Failed to save ${CONFIG_PATH}: ${message}${detail}` };
 	}
 }
 

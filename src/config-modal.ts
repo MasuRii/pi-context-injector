@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { SettingItem } from "@earendil-works/pi-tui";
-import { COMMAND_NAME, DEFAULT_CONFIG, EXTENSION_NAME } from "./constants.js";
+import { COMMAND_NAME, EXTENSION_NAME } from "./constants.js";
+import { cloneDefaultConfig } from "./shared/config-defaults.js";
 import type { ContextInjectorConfig } from "./types.js";
 
 interface ContextInjectorConfigController {
@@ -54,10 +55,10 @@ function isZellijModalModule(value: unknown): value is ZellijModalModule {
 }
 
 async function loadZellijModalModule(): Promise<ZellijModalModule> {
-	const modulePath = "../../zellij-modal/modal.js";
+	const modulePath = "./zellij-modal.js";
 	const moduleValue: unknown = await import(modulePath);
 	if (!isZellijModalModule(moduleValue)) {
-		throw new Error("zellij-modal did not expose the expected modal constructors.");
+		throw new Error("local zellij-modal module did not expose the expected modal constructors.");
 	}
 	return moduleValue;
 }
@@ -69,17 +70,6 @@ const COMMIT_COUNT_VALUES = ["3", "5", "8", "12", "20"];
 const MAX_DEPENDENCY_VALUES = ["10", "15", "25", "40"];
 const MAX_RECENT_FILE_VALUES = ["10", "20", "30", "50", "80"];
 const RECENT_FILE_AGE_VALUES = ["3", "7", "14", "30"];
-
-function cloneDefaultConfig(): ContextInjectorConfig {
-	return {
-		...DEFAULT_CONFIG,
-		ignoredSections: [...DEFAULT_CONFIG.ignoredSections],
-		compaction: {
-			...DEFAULT_CONFIG.compaction,
-			additionalContext: [...DEFAULT_CONFIG.compaction.additionalContext],
-		},
-	};
-}
 
 function toOnOff(value: boolean): string {
 	return value ? "on" : "off";

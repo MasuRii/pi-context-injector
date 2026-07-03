@@ -2,12 +2,13 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import {
 	COMMAND_NAME,
 	COMPACTION_CONTEXT_TYPE,
-	DEFAULT_CONFIG,
 	EXTENSION_NAME,
 	LEGACY_CONFIG_PATH,
 	PROJECT_CONTEXT_TYPE,
 } from "./constants.js";
 import { ensureJitiFsCacheDirectory } from "./jiti-cache.js";
+import { cloneDefaultConfig } from "./shared/config-defaults.js";
+import { loadContextInjectorConfig } from "./config-store.js";
 import type { ContextInjectorConfig } from "./types.js";
 
 type ConfigStoreModule = typeof import("./config-store.js");
@@ -21,39 +22,34 @@ interface ContextInjectorLoggerLike {
 	warn(message: string, details?: unknown): void;
 }
 
-function cloneDefaultConfig(): ContextInjectorConfig {
-	return {
-		...DEFAULT_CONFIG,
-		ignoredSections: [...DEFAULT_CONFIG.ignoredSections],
-		compaction: {
-			...DEFAULT_CONFIG.compaction,
-			additionalContext: [...DEFAULT_CONFIG.compaction.additionalContext],
-		},
-	};
-}
-
 function getSessionKey(ctx: ExtensionContext): string {
 	return ctx.sessionManager.getSessionFile() ?? ctx.sessionManager.getSessionId();
 }
 
-function sessionAlreadyHasInjectedProjectContext(ctx: ExtensionContext): boolean {
+type SessionMessage = { role?: string; customType?: string };
+
+function someSessionMessage(
+	ctx: ExtensionContext,
+	predicate: (message: SessionMessage) => boolean,
+): boolean {
 	return ctx.sessionManager.getEntries().some((entry) => {
 		if (entry.type !== "message") {
 			return false;
 		}
-		const message = entry.message as { role?: string; customType?: string };
-		return message.role === "custom" && message.customType === PROJECT_CONTEXT_TYPE;
+		const message = entry.message as SessionMessage;
+		return predicate(message);
 	});
 }
 
+function sessionAlreadyHasInjectedProjectContext(ctx: ExtensionContext): boolean {
+	return someSessionMessage(
+		ctx,
+		(message) => message.role === "custom" && message.customType === PROJECT_CONTEXT_TYPE,
+	);
+}
+
 function sessionAlreadyHasAssistantReply(ctx: ExtensionContext): boolean {
-	return ctx.sessionManager.getEntries().some((entry) => {
-		if (entry.type !== "message") {
-			return false;
-		}
-		const message = entry.message as { role?: string };
-		return message.role === "assistant";
-	});
+	return someSessionMessage(ctx, (message) => message.role === "assistant");
 }
 
 function isParentLinkedSession(ctx: ExtensionContext): boolean {
@@ -66,6 +62,10 @@ function shouldSkipParentLinkedSessionContext(config: ContextInjectorConfig, ctx
 }
 
 export default function contextInjectorExtension(pi: ExtensionAPI): void {
+	if (!loadContextInjectorConfig().config.enabled) {
+		return;
+	}
+
 	let config: ContextInjectorConfig = cloneDefaultConfig();
 	let pendingLoadWarning: string | undefined;
 	let configStorePromise: Promise<ConfigStoreModule> | undefined;
@@ -81,8 +81,16 @@ export default function contextInjectorExtension(pi: ExtensionAPI): void {
 	const initialProjectContextHandledSessions = new Set<string>();
 
 	const importRuntimeModule = <T>(loader: () => Promise<T>): Promise<T> => {
-		ensureJitiFsCacheDirectory();
-		return loader();
+		const cacheEnsureError = ensureJitiFsCacheDirectory();
+		if (!cacheEnsureError) {
+			return loader();
+		}
+		return loader().catch((loadError) => {
+			const reason = ` (jiti cache dir unavailable: ${cacheEnsureError})`;
+			throw loadError instanceof Error
+				? new Error(`${loadError.message}${reason}`)
+				: new Error(`${String(loadError)}${reason}`);
+		});
 	};
 
 	const loadConfigStore = (): Promise<ConfigStoreModule> => {

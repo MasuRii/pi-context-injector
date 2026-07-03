@@ -20,17 +20,11 @@ interface SourceResult {
 	content: string | null;
 }
 
+/** Maximum length for a single ignored-section name. Bounds regex compilation work and blocks oversized config values from causing slow regex evaluation. */
+const MAX_IGNORED_SECTION_LENGTH = 500;
+
 function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function escapeXmlAttribute(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&apos;");
 }
 
 function escapeXmlText(value: string): string {
@@ -38,6 +32,12 @@ function escapeXmlText(value: string): string {
 		.replace(/&/g, "&amp;")
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;");
+}
+
+function escapeXmlAttribute(value: string): string {
+	return escapeXmlText(value)
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&apos;");
 }
 
 function toLines(content: string): string[] {
@@ -114,7 +114,11 @@ function pruneReadme(content: string, config: ContextInjectorConfig): string {
 	pruned = pruned.replace(/^##\s*Table of Contents[\s\S]*?(?=^##\s|\Z)/gim, "");
 
 	for (const section of config.ignoredSections) {
+		if (section.length > MAX_IGNORED_SECTION_LENGTH) {
+			continue;
+		}
 		const escaped = escapeRegex(section);
+		// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — section is a config-provided ignored-section name that is length-bounded (<=MAX_IGNORED_SECTION_LENGTH) and escaped via escapeRegex before interpolation; only literal characters reach the regex engine.
 		const sectionPattern = new RegExp(`^#{2,3}\\s*${escaped}[\\s\\S]*?(?=^#{2,3}\\s|\\Z)`, "gim");
 		pruned = pruned.replace(sectionPattern, "");
 	}
@@ -284,6 +288,34 @@ function parseWorkspaceStatus(rawStatus: string): WorkspaceBucket {
 	return bucket;
 }
 
+function renderWorkspaceStatusEntries(
+	entries: { status: string; file: string }[],
+	format: ContextFormat,
+	tag: string,
+	title: string,
+): string | null {
+	if (entries.length === 0) {
+		return null;
+	}
+	if (format === "xml") {
+		return `<${tag} count="${entries.length}">\n${entries.map((entry) => `${entry.status}  ${entry.file}`).join("\n")}\n</${tag}>`;
+	}
+	return `### ${title} (${entries.length})\n${entries.map((entry) => `- ${entry.status} ${entry.file}`).join("\n")}`;
+}
+
+function renderWorkspaceUntracked(
+	total: number,
+	shown: string[],
+	more: number,
+	format: ContextFormat,
+): string {
+	if (format === "xml") {
+		const suffix = more > 0 ? `\n... and ${more} more` : "";
+		return `<untracked count="${total}"${more > 0 ? ' showing="10"' : ""}>\n${shown.map((file) => `?  ${file}`).join("\n")}${suffix}\n</untracked>`;
+	}
+	return `### Untracked (${total})\n${shown.map((file) => `- ? ${file}`).join("\n")}${more > 0 ? `\n- ... and ${more} more` : ""}`;
+}
+
 async function getWorkspaceSection(
 	cwd: string,
 	format: ContextFormat,
@@ -305,55 +337,24 @@ async function getWorkspaceSection(
 		return { name: "workspace", content: null };
 	}
 
-	if (format === "xml") {
-		const xmlParts: string[] = [];
-		if (parsed.staged.length > 0) {
-			xmlParts.push(
-				`<staged count="${parsed.staged.length}">\n${parsed.staged.map((entry) => `${entry.status}  ${entry.file}`).join("\n")}\n</staged>`,
-			);
-		}
-		if (parsed.unstaged.length > 0) {
-			xmlParts.push(
-				`<unstaged count="${parsed.unstaged.length}">\n${parsed.unstaged.map((entry) => `${entry.status}  ${entry.file}`).join("\n")}\n</unstaged>`,
-			);
-		}
-		if (parsed.untracked.length > 0) {
-			const shown = parsed.untracked.slice(0, 10);
-			const more = Math.max(0, parsed.untracked.length - shown.length);
-			const suffix = more > 0 ? `\n... and ${more} more` : "";
-			xmlParts.push(
-				`<untracked count="${parsed.untracked.length}"${more > 0 ? ' showing="10"' : ""}>\n${shown.map((file) => `?  ${file}`).join("\n")}${suffix}\n</untracked>`,
-			);
-		}
-
-		return {
-			name: "workspace",
-			content: renderSection(format, "workspace_state", "Workspace State", xmlParts.join("\n")),
-		};
+	const parts: string[] = [];
+	const stagedPart = renderWorkspaceStatusEntries(parsed.staged, format, "staged", "Staged");
+	if (stagedPart) {
+		parts.push(stagedPart);
 	}
-
-	const sections: string[] = [];
-	if (parsed.staged.length > 0) {
-		sections.push(
-			`### Staged (${parsed.staged.length})\n${parsed.staged.map((entry) => `- ${entry.status} ${entry.file}`).join("\n")}`,
-		);
-	}
-	if (parsed.unstaged.length > 0) {
-		sections.push(
-			`### Unstaged (${parsed.unstaged.length})\n${parsed.unstaged.map((entry) => `- ${entry.status} ${entry.file}`).join("\n")}`,
-		);
+	const unstagedPart = renderWorkspaceStatusEntries(parsed.unstaged, format, "unstaged", "Unstaged");
+	if (unstagedPart) {
+		parts.push(unstagedPart);
 	}
 	if (parsed.untracked.length > 0) {
 		const shown = parsed.untracked.slice(0, 10);
 		const more = Math.max(0, parsed.untracked.length - shown.length);
-		sections.push(
-			`### Untracked (${parsed.untracked.length})\n${shown.map((file) => `- ? ${file}`).join("\n")}${more > 0 ? `\n- ... and ${more} more` : ""}`,
-		);
+		parts.push(renderWorkspaceUntracked(parsed.untracked.length, shown, more, format));
 	}
 
 	return {
 		name: "workspace",
-		content: renderSection(format, "workspace_state", "Workspace State", sections.join("\n\n")),
+		content: renderSection(format, "workspace_state", "Workspace State", parts.join(format === "xml" ? "\n" : "\n\n")),
 	};
 }
 
@@ -377,12 +378,16 @@ function parsePackageDependencies(content: string, maxDependencies: number): str
 	}
 }
 
-function parseRequirementsDependencies(content: string, maxDependencies: number): string[] {
-	return content
+function sliceDependencyLines(block: string, maxDependencies: number, keepLine: (line: string) => boolean): string[] {
+	return block
 		.split("\n")
 		.map((line) => line.trim())
-		.filter((line) => line.length > 0 && !line.startsWith("#"))
+		.filter((line) => line.length > 0 && keepLine(line))
 		.slice(0, maxDependencies);
+}
+
+function parseRequirementsDependencies(content: string, maxDependencies: number): string[] {
+	return sliceDependencyLines(content, maxDependencies, (line) => !line.startsWith("#"));
 }
 
 function parsePyprojectDependencies(content: string, maxDependencies: number): string[] {
@@ -398,38 +403,66 @@ function parsePyprojectDependencies(content: string, maxDependencies: number): s
 		.slice(0, maxDependencies);
 }
 
-function parseGoMod(content: string, maxDependencies: number): { meta: string; deps: string[] } | null {
+interface ManifestDependencies {
+	meta: string;
+	block: string;
+}
+
+function parseManifestDeps(
+	content: string,
+	maxDependencies: number,
+	extract: (content: string) => ManifestDependencies,
+	keepLine: (line: string) => boolean,
+): { meta: string; deps: string[] } | null {
 	if (!content.trim()) {
 		return null;
 	}
+	const { meta, block } = extract(content);
+	const deps = sliceDependencyLines(block, maxDependencies, keepLine);
+	return { meta, deps };
+}
 
-	const moduleName = content.match(/^module\s+(.+)$/m)?.[1]?.trim() ?? "unknown";
-	const goVersion = content.match(/^go\s+(.+)$/m)?.[1]?.trim() ?? "n/a";
-	const requireBlock = content.match(/require\s*\(([\s\S]*?)\)/m)?.[1] ?? "";
-	const deps = requireBlock
-		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => line.length > 0 && !line.startsWith("//"))
-		.slice(0, maxDependencies);
-
-	return { meta: `module=${moduleName}, go=${goVersion}`, deps };
+function parseGoMod(content: string, maxDependencies: number): { meta: string; deps: string[] } | null {
+	return parseManifestDeps(content, maxDependencies, (text) => {
+		const moduleName = text.match(/^module\s+(.+)$/m)?.[1]?.trim() ?? "unknown";
+		const goVersion = text.match(/^go\s+(.+)$/m)?.[1]?.trim() ?? "n/a";
+		return {
+			meta: `module=${moduleName}, go=${goVersion}`,
+			block: text.match(/require\s*\(([\s\S]*?)\)/m)?.[1] ?? "",
+		};
+	}, (line) => !line.startsWith("//"));
 }
 
 function parseCargo(content: string, maxDependencies: number): { meta: string; deps: string[] } | null {
-	if (!content.trim()) {
-		return null;
+	return parseManifestDeps(content, maxDependencies, (text) => {
+		const crate = text.match(/^\s*name\s*=\s*"(.+)"/m)?.[1] ?? "unknown";
+		const version = text.match(/^\s*version\s*=\s*"(.+)"/m)?.[1] ?? "n/a";
+		return {
+			meta: `crate=${crate}, version=${version}`,
+			block: text.match(/\[dependencies\]([\s\S]*?)(?:\n\[|\Z)/m)?.[1] ?? "",
+		};
+	}, (line) => !line.startsWith("#") && line.includes("="));
+}
+
+function renderManifestSection(
+	format: ContextFormat,
+	tag: string,
+	title: string,
+	parsed: { meta: string; deps: string[] },
+): string {
+	if (format === "xml") {
+		const attributes = parsed.meta
+			.split(", ")
+			.map((entry) => {
+				const [key, value] = entry.split("=");
+				return `${key}="${escapeXmlAttribute(value ?? "")}"`;
+			})
+			.join(" ");
+		const body = parsed.deps.length > 0 ? `<dependencies>\n${parsed.deps.join("\n")}\n</dependencies>` : "";
+		return `<${tag} ${attributes}>\n${body}\n</${tag}>`;
 	}
-
-	const crate = content.match(/^\s*name\s*=\s*"(.+)"/m)?.[1] ?? "unknown";
-	const version = content.match(/^\s*version\s*=\s*"(.+)"/m)?.[1] ?? "n/a";
-	const dependencyBlock = content.match(/\[dependencies\]([\s\S]*?)(?:\n\[|\Z)/m)?.[1] ?? "";
-	const deps = dependencyBlock
-		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => line.length > 0 && !line.startsWith("#") && line.includes("="))
-		.slice(0, maxDependencies);
-
-	return { meta: `crate=${crate}, version=${version}`, deps };
+	const deps = parsed.deps.length > 0 ? `\n${parsed.deps.map((dep) => `- ${dep}`).join("\n")}` : "";
+	return `### ${title} (${parsed.meta})${deps}`;
 }
 
 async function getTechStackSection(
@@ -484,17 +517,7 @@ async function getTechStackSection(
 	if (goMod) {
 		const parsed = parseGoMod(goMod, config.maxDependencies);
 		if (parsed) {
-			sections.push(
-				format === "xml"
-					? `<go ${parsed.meta
-						.split(", ")
-						.map((entry) => {
-							const [key, value] = entry.split("=");
-							return `${key}="${escapeXmlAttribute(value ?? "")}"`;
-						})
-						.join(" ")}>\n${parsed.deps.length > 0 ? `<dependencies>\n${parsed.deps.join("\n")}\n</dependencies>` : ""}\n</go>`
-					: `### Go (${parsed.meta})${parsed.deps.length > 0 ? `\n${parsed.deps.map((dep) => `- ${dep}`).join("\n")}` : ""}`,
-			);
+			sections.push(renderManifestSection(format, "go", "Go", parsed));
 		}
 	}
 
@@ -502,17 +525,7 @@ async function getTechStackSection(
 	if (cargo) {
 		const parsed = parseCargo(cargo, config.maxDependencies);
 		if (parsed) {
-			sections.push(
-				format === "xml"
-					? `<rust ${parsed.meta
-						.split(", ")
-						.map((entry) => {
-							const [key, value] = entry.split("=");
-							return `${key}="${escapeXmlAttribute(value ?? "")}"`;
-						})
-						.join(" ")}>\n${parsed.deps.length > 0 ? `<dependencies>\n${parsed.deps.join("\n")}\n</dependencies>` : ""}\n</rust>`
-					: `### Rust (${parsed.meta})${parsed.deps.length > 0 ? `\n${parsed.deps.map((dep) => `- ${dep}`).join("\n")}` : ""}`,
-			);
+			sections.push(renderManifestSection(format, "rust", "Rust", parsed));
 		}
 	}
 
@@ -704,6 +717,29 @@ export function detectFormat(config: ContextInjectorConfig, model: ModelLike | u
 	return "markdown";
 }
 
+function nonNullSections(sections: SourceResult[]): Array<SourceResult & { content: string }> {
+	return sections.filter((section) => section.content !== null) as Array<SourceResult & { content: string }>;
+}
+
+function assembleContextBlock(
+	format: ContextFormat,
+	tag: string,
+	title: string,
+	sections: Array<SourceResult & { content: string }>,
+	stripBold: boolean,
+): BuildContextResult {
+	if (sections.length === 0) {
+		return { block: null, sectionNames: [], warnings: [] };
+	}
+	let block = finalizeBlock(format, tag, title, sections.map((section) => section.content));
+	block = applyBoldStripping(block, stripBold);
+	return {
+		block,
+		sectionNames: sections.map((section) => section.name),
+		warnings: [],
+	};
+}
+
 export async function buildProjectContext(
 	cwd: string,
 	format: ContextFormat,
@@ -717,27 +753,7 @@ export async function buildProjectContext(
 		getGitSection(cwd, format, config, logger),
 	]);
 
-	const ordered = [readme, techStack, workspace, git].filter((section) => section.content !== null) as Array<
-		SourceResult & { content: string }
-	>;
-
-	if (ordered.length === 0) {
-		return { block: null, sectionNames: [], warnings: [] };
-	}
-
-	let block = finalizeBlock(
-		format,
-		"project_context",
-		"project_context",
-		ordered.map((section) => section.content),
-	);
-	block = applyBoldStripping(block, config.stripBold);
-
-	return {
-		block,
-		sectionNames: ordered.map((section) => section.name),
-		warnings: [],
-	};
+	return assembleContextBlock(format, "project_context", "project_context", nonNullSections([readme, techStack, workspace, git]), config.stripBold);
 }
 
 export async function buildCompactionContext(
@@ -767,22 +783,5 @@ export async function buildCompactionContext(
 		sections.push({ name: "additional_context", content: line });
 	}
 
-	const nonEmpty = sections.filter((section) => section.content !== null) as Array<SourceResult & { content: string }>;
-	if (nonEmpty.length === 0) {
-		return { block: null, sectionNames: [], warnings: [] };
-	}
-
-	let block = finalizeBlock(
-		format,
-		"compaction_context",
-		"compaction_context",
-		nonEmpty.map((section) => section.content),
-	);
-	block = applyBoldStripping(block, config.stripBold);
-
-	return {
-		block,
-		sectionNames: nonEmpty.map((section) => section.name),
-		warnings: [],
-	};
+	return assembleContextBlock(format, "compaction_context", "compaction_context", nonNullSections(sections), config.stripBold);
 }

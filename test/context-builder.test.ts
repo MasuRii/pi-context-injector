@@ -77,3 +77,23 @@ test("buildProjectContext renders README and tech stack sections without git or 
 	assert.match(result.block ?? "", /zod/);
 	assert.doesNotMatch(result.block ?? "", /hidden|badge|\*\*/);
 });
+
+test("pruneReadme still works with an oversized ignored section name (length-limited)", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "pi-context-injector-redos-"));
+	const oversizedSection = "a".repeat(600);
+	await writeFile(join(cwd, "README.md"), "# Demo\n\n## Usage\n\nKeep.\n\n## License\n\nMIT\n", "utf-8");
+
+	const result = await buildProjectContext(cwd, "markdown", {
+		...DEFAULT_CONFIG,
+		enableGit: false,
+		enableWorkspaceState: false,
+		enableTechStack: false,
+		stripBold: false,
+		readmeLines: 20,
+		ignoredSections: [oversizedSection],
+	}, silentLogger);
+
+	assert.deepEqual(result.sectionNames, ["readme"]);
+	assert.match(result.block ?? "", /Keep\./);
+	assert.match(result.block ?? "", /MIT/);
+});

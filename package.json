@@ -1,6 +1,6 @@
 {
   "name": "pi-context-injector",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Pi extension that injects project context into first-turn prompts and compaction continuity messages.",
   "type": "module",
   "main": "./index.ts",

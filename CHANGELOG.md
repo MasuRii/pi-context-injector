@@ -4,6 +4,15 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-03
+
+### Added
+- Added an `enabled` master config toggle (with a configuration modal entry) to disable the extension without uninstalling. ([62fb3d5](https://github.com/MasuRii/pi-context-injector/commit/62fb3d5a42ec1783f894b23c62412b7e3db479c2))
+
+### Changed
+- Widened Pi peer dependency ranges to 0.80 and added security dependency overrides. ([3e9a780](https://github.com/MasuRii/pi-context-injector/commit/3e9a7806e0d4478930f6c097d7c27ea29484e730))
+- Extracted config defaults and vendored the zellij modal locally to remove the external dependency. ([62fb3d5](https://github.com/MasuRii/pi-context-injector/commit/62fb3d5a42ec1783f894b23c62412b7e3db479c2))
+
 ## [0.1.4] - 2026-06-16
 
 ### Fixed

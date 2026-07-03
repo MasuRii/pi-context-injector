@@ -1,13 +1,19 @@
+<div align="center">
+
 # pi-context-injector
 
-[![npm version](https://img.shields.io/npm/v/pi-context-injector?style=flat-square)](https://www.npmjs.com/package/pi-context-injector) [![License](https://img.shields.io/github/license/MasuRii/pi-context-injector?style=flat-square)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/pi-context-injector?style=for-the-badge)](https://www.npmjs.com/package/pi-context-injector)
+[![License](https://img.shields.io/github/license/MasuRii/pi-context-injector?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=for-the-badge)]()
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y01PSSVR)
 
 <img width="1389" height="768" alt="image" src="https://github.com/user-attachments/assets/db3c4ceb-e24e-4bc7-93b1-be3ea5f88d5c" />
-
 `pi-context-injector` is a Pi extension that injects compact project context into the first user turn and adds continuity context after conversation compaction.
-
 - **npm**: https://www.npmjs.com/package/pi-context-injector
 - **GitHub**: https://github.com/MasuRii/pi-context-injector
+
+</div>
 
 ## Capabilities
 
@@ -205,12 +211,10 @@ The package metadata follows the publish-ready shape used by established local P
 
 ## Related Pi Extensions
 
-| Extension | Install | Description |
-|-----------|---------|-------------|
-| [pi-agent-router](https://www.npmjs.com/package/pi-agent-router) | `pi install npm:pi-agent-router` | Active-agent routing and controlled subagent delegation that can require context injection for delegated sessions |
-| [pi-multi-auth](https://www.npmjs.com/package/pi-multi-auth) | `pi install npm:pi-multi-auth` | Multi-provider credential management, OAuth login, and account rotation |
-| [pi-mcp-adapter](https://github.com/MasuRii/pi-mcp-adapter) | `pi install git:github.com/MasuRii/pi-mcp-adapter` | MCP server discovery and Pi tool exposure for external context sources |
-| [pi-rtk-optimizer](https://www.npmjs.com/package/pi-rtk-optimizer) | `pi install npm:pi-rtk-optimizer` | RTK command rewriting and tool output compaction that complements compact context injection |
+- [pi-agent-router](https://github.com/MasuRii/pi-agent-router) — Active-agent routing and controlled subagent delegation that can require context injection for delegated sessions
+- [pi-multi-auth](https://github.com/MasuRii/pi-multi-auth) — Multi-provider credential management, OAuth login, and account rotation
+- [pi-mcp-adapter](https://github.com/MasuRii/pi-mcp-adapter) — MCP server discovery and Pi tool exposure for external context sources
+- [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) — RTK command rewriting and tool output compaction that complements compact context injection
 
 ## License
 
